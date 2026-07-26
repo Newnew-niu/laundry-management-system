@@ -1,62 +1,94 @@
-"""Dashboard page: read-only overview of recent orders and customers."""
+"""Dashboard: KPI overview cards + today's pickups action list."""
 
-import pandas as pd
+import datetime as dt
+
 import streamlit as st
 
-from db import get_connection
+import db
+import ui
+
+
+def _kpis():
+    today = dt.date.today()
+    today_orders = db.fetch_one(
+        "SELECT COUNT(*) FROM orders WHERE order_date = ?", (today,)
+    )[0]
+    ready = db.fetch_one(
+        "SELECT COUNT(*) FROM orders WHERE status = 'ready'", ()
+    )[0]
+    washing = db.fetch_one(
+        "SELECT COUNT(*) FROM orders WHERE status IN ('pending','washing')", ()
+    )[0]
+    overdue = db.fetch_one(
+        "SELECT COUNT(*) FROM orders "
+        "WHERE status != 'picked_up' AND agreed_pickup_time < ?",
+        (today,),
+    )[0]
+    unpaid = db.fetch_one(
+        "SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE paid = 0", ()
+    )[0]
+    return today_orders, ready, washing, overdue, unpaid
 
 
 def render():
-    st.title("👕 Dashboard - Overview")
-    try:
-        conn = get_connection()
+    st.title("👕 Today at a Glance")
 
-        # --- Recent orders ---
-        st.subheader("📦 Recent Orders")
-        query_orders = """
-            SELECT
-                o.order_id AS 'System ID',
-                o.order_code AS 'Order No.',
-                o.order_date AS 'Date Created',
-                c.name AS 'Customer',
-                o.total_amount AS 'Amount',
-                o.agreed_pickup_time AS 'Pickup Date',
-                o.notes AS 'Notes'
-            FROM orders o
-            JOIN customers c ON o.customer_id = c.customer_id
-            ORDER BY o.order_id DESC LIMIT 10
+    today_orders, ready, washing, overdue, unpaid = _kpis()
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("🧺 Orders today", today_orders)
+    c2.metric("✅ Ready for pickup", ready)
+    c3.metric("🌀 In progress", washing)
+    c4.metric("⚠️ Overdue", overdue)
+    c5.metric("💶 Unpaid total", ui.euro(unpaid))
+
+    st.divider()
+    st.subheader("📦 Pickups due today")
+
+    today = dt.date.today()
+    rows = db.fetch_all(
         """
-        df_orders = pd.read_sql(query_orders, conn)
+        SELECT o.order_id, o.order_code, c.name, c.phone,
+               o.agreed_pickup_time, o.status, o.paid, o.total_amount
+        FROM orders o JOIN customers c ON o.customer_id = c.customer_id
+        WHERE o.status != 'picked_up' AND o.agreed_pickup_time <= ?
+        ORDER BY o.agreed_pickup_time, o.order_id
+        """,
+        (today,),
+    )
 
-        if not df_orders.empty:
-            st.dataframe(
-                df_orders,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "System ID": st.column_config.NumberColumn(format="%d"),
-                    "Order No.": st.column_config.TextColumn(),
-                    "Amount": st.column_config.NumberColumn(format="€ %.2f"),
-                    "Date Created": st.column_config.DateColumn(format="DD/MM/YYYY"),
-                    "Pickup Date": st.column_config.DateColumn(format="DD/MM/YYYY"),
-                },
+    if not rows:
+        st.info("Nothing due today. 🎉  New orders appear here on their pickup date.")
+        return
+
+    for oid, code, name, phone, pickup, status, paid, amount in rows:
+        eff = ui.effective_status(status, pickup)
+        with st.container(border=True):
+            col1, col2, col3, col4 = st.columns([3, 3, 2, 2])
+            col1.markdown(
+                f"{ui.badge(eff)}&nbsp;&nbsp;**{code or f'#{oid}'}**",
+                unsafe_allow_html=True,
             )
-        else:
-            st.info("No orders found yet.")
-
-        # --- Customer list ---
-        st.subheader("👥 Customer List")
-        df_customers = pd.read_sql(
-            "SELECT customer_id as 'ID', name as 'Name', phone as 'Phone', "
-            "notes as 'Notes' FROM customers ORDER BY customer_id DESC",
-            conn,
-        )
-        st.dataframe(
-            df_customers,
-            use_container_width=True,
-            hide_index=True,
-            column_config={"ID": st.column_config.NumberColumn(format="%d")},
-        )
-        conn.close()
-    except Exception as e:
-        st.error(f"Database Error: {e}")
+            col2.markdown(f"**{name}**  \n📞 {phone or '—'}")
+            col3.markdown(
+                f"**{ui.euro(amount)}**  \n{ui.paid_chip(paid)}",
+                unsafe_allow_html=True,
+            )
+            if status == "ready":
+                if col4.button(
+                    "📦 Picked up", key=f"dash_pick_{oid}", width="stretch"
+                ):
+                    db.execute(
+                        "UPDATE orders SET status = 'picked_up' WHERE order_id = ?",
+                        (oid,),
+                    )
+                    ui.flash(f"Order {code or oid} marked as picked up.")
+                    st.rerun()
+            else:
+                label, nxt = ui.NEXT_ACTION[status]
+                if col4.button(label, key=f"dash_adv_{oid}", width="stretch"):
+                    db.execute(
+                        "UPDATE orders SET status = ? WHERE order_id = ?", (nxt, oid)
+                    )
+                    ui.flash(f"Order {code or oid} → {ui.STATUS_META[nxt][0]}.")
+                    st.rerun()
