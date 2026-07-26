@@ -21,8 +21,23 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ENGINE = os.getenv("DB_ENGINE", "sqlite").strip().lower()
-DB_PATH = os.getenv("DB_PATH", "laundry.db")
+
+def _cfg(name, default=""):
+    """Read a setting from the environment, falling back to st.secrets so the
+    app can also be configured on Streamlit Community Cloud."""
+    value = os.getenv(name)
+    if value is not None:
+        return value
+    try:
+        import streamlit as st
+
+        return str(st.secrets[name])
+    except Exception:
+        return default
+
+
+ENGINE = _cfg("DB_ENGINE", "sqlite").strip().lower()
+DB_PATH = _cfg("DB_PATH", "laundry.db")
 
 DEFAULT_SERVICES = [
     ("Wash & Fold", 8.00, "kg"),
@@ -77,11 +92,11 @@ def get_connection():
         import mysql.connector
 
         return mysql.connector.connect(
-            host=os.getenv("DB_HOST", "localhost"),
-            user=os.getenv("DB_USER", "root"),
-            password=os.getenv("DB_PASSWORD", ""),
-            database=os.getenv("DB_NAME", "laundry_db"),
-            port=int(os.getenv("DB_PORT", "3306")),
+            host=_cfg("DB_HOST", "localhost"),
+            user=_cfg("DB_USER", "root"),
+            password=_cfg("DB_PASSWORD", ""),
+            database=_cfg("DB_NAME", "laundry_db"),
+            port=int(_cfg("DB_PORT", "3306")),
         )
     return sqlite3.connect(DB_PATH)
 
