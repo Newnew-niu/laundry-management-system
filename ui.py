@@ -34,8 +34,12 @@ NEXT_ACTION = {
 
 
 def to_date(value):
-    """Normalise DB date values (str from SQLite, date from MySQL) to date."""
-    if value is None or isinstance(value, _dt.date):
+    """Normalise DB date values (str from SQLite, date/datetime from MySQL)."""
+    if value is None:
+        return None
+    if isinstance(value, _dt.datetime):  # before date: datetime subclasses date
+        return value.date()
+    if isinstance(value, _dt.date):
         return value
     return _dt.datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
 
