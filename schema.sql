@@ -35,7 +35,9 @@ CREATE TABLE IF NOT EXISTS orders (
     agreed_pickup_time DATE,
     status             VARCHAR(20) DEFAULT 'pending',
     paid               TINYINT DEFAULT 0,
-    total_amount       DECIMAL(10, 2) DEFAULT 0.00,
+    -- NULL = "TBD": the price is entered after processing, so this column
+    -- must stay nullable (NOT NULL here breaks order creation).
+    total_amount       DECIMAL(10, 2) NULL DEFAULT NULL,
     notes              TEXT,
     created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_orders_customer

@@ -13,6 +13,11 @@
 --   mysql -u root -p laundry_db < scripts/upgrade_mysql_v3.sql
 -- ---------------------------------------------------------------------------
 
+-- Orders created after v3 store total_amount = NULL until priced, so the
+-- column must be nullable (legacy v1 tables often declared it NOT NULL,
+-- which makes order creation fail with MySQL error 1048).
+ALTER TABLE orders MODIFY total_amount DECIMAL(10, 2) NULL DEFAULT NULL;
+
 ALTER TABLE services ADD COLUMN description VARCHAR(255) DEFAULT '';
 
 UPDATE services SET active = 0;
