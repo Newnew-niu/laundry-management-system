@@ -155,8 +155,8 @@ def inject_css():
     st.markdown(
         """
         <style>
-        /* Roomier page padding */
-        .block-container { padding-top: 1.2rem; padding-bottom: 3rem; }
+        /* Roomier page padding (top clears Streamlit's sticky header) */
+        .block-container { padding-top: 3rem; padding-bottom: 3rem; }
 
         /* KPI metric cards: bordered tiles with big values */
         div[data-testid="stMetric"] {

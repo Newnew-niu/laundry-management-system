@@ -1,8 +1,8 @@
 # Screenshots
 
-Drop UI screenshots here and link them from the main README. Suggested shots
-(taken with the demo data from `python seed_demo.py`):
+UI screenshots referenced from the main README, captured with the fake demo
+data from `python seed_demo.py` (SQLite engine):
 
-- `dashboard.png` — KPI card row + pickups due today
-- `new-order.png` — POS flow with a couple of services selected
-- `orders.png` — order list with mixed status badges
+- `dashboard.jpg` — KPI card row + pickups due today
+- `new-order.jpg` — service-type cards with two selected
+- `orders.jpg` — order list with status badges, TBD pricing and filters
