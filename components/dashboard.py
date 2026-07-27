@@ -27,20 +27,29 @@ def _kpis():
     unpaid = db.fetch_one(
         "SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE paid = 0", ()
     )[0]
-    return today_orders, ready, washing, overdue, unpaid
+    unpaid_tbd = db.fetch_one(
+        "SELECT COUNT(*) FROM orders WHERE paid = 0 AND total_amount IS NULL", ()
+    )[0]
+    return today_orders, ready, washing, overdue, unpaid, unpaid_tbd
 
 
 def render():
     st.title("👕 Today at a Glance")
 
-    today_orders, ready, washing, overdue, unpaid = _kpis()
+    today_orders, ready, washing, overdue, unpaid, unpaid_tbd = _kpis()
 
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("🧺 Orders today", today_orders)
     c2.metric("✅ Ready for pickup", ready)
     c3.metric("🌀 In progress", washing)
     c4.metric("⚠️ Overdue", overdue)
-    c5.metric("💶 Unpaid total", ui.euro(unpaid))
+    c5.metric(
+        "💶 Unpaid total",
+        ui.euro(unpaid),
+        delta=f"+{unpaid_tbd} TBD" if unpaid_tbd else None,
+        delta_color="off",
+        help="Sum of priced, unpaid orders. TBD = unpaid orders not priced yet.",
+    )
 
     st.divider()
     st.subheader("📦 Pickups due today")
@@ -71,12 +80,13 @@ def render():
             )
             col2.markdown(f"**{name}**  \n📞 {phone or '—'}")
             col3.markdown(
-                f"**{ui.euro(amount)}**  \n{ui.paid_chip(paid)}",
+                f"{ui.amount_display(amount)}<br>{ui.paid_chip(paid)}",
                 unsafe_allow_html=True,
             )
             if status == "ready":
                 if col4.button(
-                    "📦 Picked up", key=f"dash_pick_{oid}", width="stretch"
+                    "📦 Picked up", key=f"dash_pick_{oid}", type="primary",
+                    width="stretch",
                 ):
                     db.execute(
                         "UPDATE orders SET status = 'picked_up' WHERE order_id = ?",
@@ -86,9 +96,14 @@ def render():
                     st.rerun()
             else:
                 label, nxt = ui.NEXT_ACTION[status]
-                if col4.button(label, key=f"dash_adv_{oid}", width="stretch"):
-                    db.execute(
-                        "UPDATE orders SET status = ? WHERE order_id = ?", (nxt, oid)
-                    )
-                    ui.flash(f"Order {code or oid} → {ui.STATUS_META[nxt][0]}.")
-                    st.rerun()
+                if col4.button(label, key=f"dash_adv_{oid}", type="primary",
+                               width="stretch"):
+                    if nxt == "ready" and amount is None:
+                        ui.price_dialog(oid, code, advance_to="ready")
+                    else:
+                        db.execute(
+                            "UPDATE orders SET status = ? WHERE order_id = ?",
+                            (nxt, oid),
+                        )
+                        ui.flash(f"Order {code or oid} → {ui.STATUS_META[nxt][0]}.")
+                        st.rerun()

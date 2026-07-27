@@ -1,5 +1,6 @@
-"""New Order: POS-style flow — pick customer, tap services, auto total, one
-big submit button. Widgets stay outside st.form so the total updates live."""
+"""New Order: POS-style flow — pick customer, tap service types, one big
+submit button. Pricing happens later, from the Orders page, once the items
+have been processed."""
 
 import datetime as dt
 
@@ -9,9 +10,9 @@ import db
 import ui
 
 
-def _reset_quantities():
+def _reset_selection():
     for key in list(st.session_state):
-        if key.startswith("qty_"):
+        if key.startswith("svc_"):
             del st.session_state[key]
 
 
@@ -52,50 +53,40 @@ def render():
     st.markdown("#### 1️⃣ Who is it for?")
     customer_id, new_customer = _customer_picker()
 
-    # --- Step 2: services with quantity steppers ---
-    st.markdown("#### 2️⃣ What are we washing?")
+    # --- Step 2: service types (multi-select cards, no prices) ---
+    st.markdown("#### 2️⃣ Service")
     services = db.get_active_services()
     if not services:
         st.info("No services configured yet — add some in **Settings** first.")
         return
 
-    items = []
-    cols = st.columns(3)
-    for i, (sid, name, price, unit) in enumerate(services):
-        with cols[i % 3].container(border=True):
-            st.markdown(f"**{name}**  \n{ui.euro(price)} / {unit}")
-            qty = st.number_input(
-                f"Qty — {name}",
-                min_value=0.0,
-                step=1.0,
-                format="%g",
-                key=f"qty_{sid}",
-                label_visibility="collapsed",
-            )
-            if qty > 0:
-                items.append((sid, name, float(price), float(qty)))
+    selected = []
+    cols = st.columns(4)
+    for i, (sid, name, description) in enumerate(services):
+        with cols[i % 4].container(border=True):
+            st.markdown(f"**{name}**")
+            st.caption(description or "&nbsp;", unsafe_allow_html=True)
+            if st.toggle("Select", key=f"svc_{sid}"):
+                selected.append((sid, name))
 
-    total = sum(price * qty for _s, _n, price, qty in items)
-
-    # --- Step 3: details + big submit ---
+    # --- Step 3: details + big submit (no price yet — entered after
+    # processing, from the Orders page) ---
     st.markdown("#### 3️⃣ Confirm")
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     order_code = col1.text_input("Ticket no.", value=db.next_order_code())
     pickup = col2.date_input(
         "Pickup date", dt.date.today() + dt.timedelta(days=2), format="DD/MM/YYYY"
     )
-    paid = col3.toggle("Paid now 💶", value=False)
     notes = st.text_input("Notes (optional)", placeholder="E.g. red wine stain on shirt")
 
-    if items:
-        summary = "  ·  ".join(f"{n} ×{q:g}" for _s, n, _p, q in items)
-        st.markdown(f"🧾 {summary}")
+    if selected:
+        st.markdown("🧾 " + "  ·  ".join(name for _sid, name in selected))
 
     if st.button(
-        f"✅ Create order — {ui.euro(total)}",
+        "✅ Create order",
         type="primary",
         width="stretch",
-        disabled=not items,
+        disabled=not selected,
     ):
         if new_customer is not None:
             if not new_customer["name"]:
@@ -109,12 +100,13 @@ def render():
             st.error("⚠️ Please select or add a customer first.")
             st.stop()
 
-        _oid, total = db.create_order(
-            customer_id, order_code.strip(), pickup, items, paid, notes.strip()
+        db.create_order(
+            customer_id, order_code.strip(), pickup, selected, notes.strip()
         )
-        _reset_quantities()
-        ui.flash(f"Order {order_code} created — {ui.euro(total)}", "🧺")
+        _reset_selection()
+        ui.flash(f"Order {order_code} created — price to be set after processing.",
+                 "🧺")
         st.rerun()
 
-    if not items:
-        st.caption("Tap a quantity above to add services — the total updates live.")
+    if not selected:
+        st.caption("Tap at least one service card above to enable the button.")

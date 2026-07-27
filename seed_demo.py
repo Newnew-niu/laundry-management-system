@@ -65,22 +65,26 @@ def main():
         order_date = today - dt.timedelta(days=random.randint(0, 9))
         pickup = order_date + dt.timedelta(days=random.randint(1, 4))
         status = random.choice(statuses)
-        paid = 1 if (status == "picked_up" or random.random() < 0.4) else 0
 
-        picks = random.sample(services, k=random.randint(1, 3))
-        items = [
-            (sid, name, float(price), float(random.randint(1, 3)))
-            for sid, name, price, _unit in picks
-        ]
+        picks = random.sample(services, k=random.randint(1, 2))
+        selected = [(sid, name) for sid, name, _desc in picks]
         code = f"L{order_date.strftime('%y%m%d')}-{i + 1:03d}"
 
-        order_id, _total = db.create_order(
-            random.choice(customer_ids), code, pickup, items,
-            paid, "Demo order",
+        order_id = db.create_order(
+            random.choice(customer_ids), code, pickup, selected, "Demo order"
         )
+
+        # Pricing happens after processing: most ready/picked-up orders are
+        # priced (a couple stay TBD); pending/washing orders have no price yet.
+        amount = None
+        paid = 0
+        if status in ("ready", "picked_up") and random.random() < 0.8:
+            amount = float(random.randint(8, 60))
+            paid = 1 if (status == "picked_up" or random.random() < 0.5) else 0
         db.execute(
-            "UPDATE orders SET status = ?, order_date = ? WHERE order_id = ?",
-            (status, order_date, order_id),
+            "UPDATE orders SET status = ?, order_date = ?, total_amount = ?, "
+            "paid = ? WHERE order_id = ?",
+            (status, order_date, amount, paid, order_id),
         )
 
     print(f"Seeded {len(customer_ids)} demo customers and {n_orders} demo orders "

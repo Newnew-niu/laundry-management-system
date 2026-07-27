@@ -28,7 +28,13 @@ def _edit_dialog(order):
         index=ui.STATUS_FLOW.index(status),
         format_func=lambda s: f"{ui.STATUS_META[s][1]} {ui.STATUS_META[s][0]}",
     )
-    new_amount = st.number_input("Amount (€)", value=float(amount), format="%.2f")
+    new_amount = st.number_input(
+        "Amount (€) — leave empty for TBD",
+        value=None if amount is None else float(amount),
+        min_value=0.0,
+        format="%.2f",
+        placeholder="TBD",
+    )
     new_paid = st.toggle("Paid 💶", value=bool(paid))
     new_notes = st.text_area("Notes", value=notes or "")
     if st.button("💾 Save changes", type="primary", width="stretch"):
@@ -46,7 +52,7 @@ def _edit_dialog(order):
 def _delete_dialog(oid, code):
     st.warning(f"Delete order **{code or oid}**? This cannot be undone.")
     c1, c2 = st.columns(2)
-    if c1.button("Yes, delete", type="primary", width="stretch"):
+    if c1.button("Yes, delete", key="confirm_del_order", width="stretch"):
         db.execute("DELETE FROM order_items WHERE order_id = ?", (oid,))
         db.execute("DELETE FROM orders WHERE order_id = ?", (oid,))
         ui.flash(f"Order {code or oid} deleted.", "🗑️")
@@ -103,21 +109,33 @@ def render():
                 f"🧾 {items_by_order.get(oid, '—')}"
             )
             c3.markdown(
-                f"**{ui.euro(amount)}**<br>{ui.paid_chip(paid)}",
+                f"{ui.amount_display(amount)}<br>{ui.paid_chip(paid)}",
                 unsafe_allow_html=True,
             )
             with c4:
                 if status_ in ui.NEXT_ACTION:
                     label, nxt = ui.NEXT_ACTION[status_]
-                    if st.button(label, key=f"adv_{oid}", width="stretch"):
-                        db.execute(
-                            "UPDATE orders SET status=? WHERE order_id=?", (nxt, oid)
-                        )
-                        ui.flash(f"Order {code or oid} → {ui.STATUS_META[nxt][0]}.")
-                        st.rerun()
-                if not paid:
-                    if st.button("💶 Mark paid", key=f"pay_{oid}",
+                    if st.button(label, key=f"adv_{oid}", type="primary",
                                  width="stretch"):
+                        if nxt == "ready" and amount is None:
+                            # Processing done: time to enter the final price.
+                            ui.price_dialog(oid, code, advance_to="ready")
+                        else:
+                            db.execute(
+                                "UPDATE orders SET status=? WHERE order_id=?",
+                                (nxt, oid),
+                            )
+                            ui.flash(
+                                f"Order {code or oid} → {ui.STATUS_META[nxt][0]}."
+                            )
+                            st.rerun()
+                if amount is None:
+                    if st.button("💶 Set price", key=f"price_{oid}",
+                                 type="primary", width="stretch"):
+                        ui.price_dialog(oid, code)
+                elif not paid:
+                    if st.button("💶 Mark paid", key=f"pay_{oid}",
+                                 type="primary", width="stretch"):
                         db.execute(
                             "UPDATE orders SET paid=1 WHERE order_id=?", (oid,)
                         )

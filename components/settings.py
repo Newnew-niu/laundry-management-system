@@ -9,14 +9,16 @@ import ui
 def render():
     st.title("⚙️ Settings")
 
-    st.subheader("🧾 Services & prices")
+    st.subheader("🧾 Service types")
     st.caption(
-        "These are the buttons staff see on the New Order page. "
+        "These are the cards staff see on the New Order page. Prices are set "
+        "per order after processing, so a service is just a code + description. "
         "Untick **Active** to hide a service without losing its history."
     )
 
     df = db.fetch_df(
-        "SELECT service_id, name, price, unit, active FROM services ORDER BY service_id"
+        "SELECT service_id, name, description, active FROM services "
+        "ORDER BY service_id"
     )
     edited = st.data_editor(
         df,
@@ -25,10 +27,8 @@ def render():
         disabled=["service_id"],
         column_config={
             "service_id": st.column_config.NumberColumn("ID", format="%d"),
-            "name": st.column_config.TextColumn("Service", required=True),
-            "price": st.column_config.NumberColumn("Price (€)", format="%.2f",
-                                                   min_value=0.0),
-            "unit": st.column_config.TextColumn("Unit"),
+            "name": st.column_config.TextColumn("Code", required=True),
+            "description": st.column_config.TextColumn("Description"),
             "active": st.column_config.CheckboxColumn("Active"),
         },
         key="services_editor",
@@ -36,9 +36,9 @@ def render():
     if st.button("💾 Save services", type="primary"):
         for _idx, row in edited.iterrows():
             db.execute(
-                "UPDATE services SET name=?, price=?, unit=?, active=? "
+                "UPDATE services SET name=?, description=?, active=? "
                 "WHERE service_id=?",
-                (row["name"], float(row["price"]), row["unit"],
+                (row["name"], row["description"] or "",
                  int(bool(row["active"])), int(row["service_id"])),
             )
         ui.flash("Services saved.", "🧾")
@@ -46,18 +46,18 @@ def render():
 
     with st.form("add_service", clear_on_submit=True):
         st.markdown("**➕ Add a service**")
-        c1, c2, c3 = st.columns([3, 1, 1])
-        name = c1.text_input("Name *")
-        price = c2.number_input("Price (€)", min_value=0.0, format="%.2f")
-        unit = c3.text_input("Unit", value="item")
-        if st.form_submit_button("Add service", width="stretch"):
+        c1, c2 = st.columns([1, 2])
+        name = c1.text_input("Code *", placeholder="e.g. L")
+        description = c2.text_input("Description", placeholder="e.g. Laundry + Dry + Fold")
+        if st.form_submit_button("Add service", type="primary",
+                                 width="stretch"):
             if not name.strip():
-                st.error("Name is required.")
+                st.error("Code is required.")
             else:
                 db.execute(
-                    "INSERT INTO services (name, price, unit, active) "
-                    "VALUES (?, ?, ?, 1)",
-                    (name.strip(), price, unit.strip() or "item"),
+                    "INSERT INTO services (name, description, price, unit, active) "
+                    "VALUES (?, ?, 0, 'item', 1)",
+                    (name.strip(), description.strip()),
                 )
                 ui.flash(f"Service “{name}” added.", "🧾")
                 st.rerun()
