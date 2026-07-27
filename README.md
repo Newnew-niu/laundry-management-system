@@ -9,9 +9,23 @@ database setup at all) and scales up to **MySQL**.
 ![Streamlit](https://img.shields.io/badge/streamlit-1.45%2B-ff4b4b)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-> 🖼️ **Screenshots coming soon** — see `docs/screenshots/` for the shot list.
-> The dashboard shows a row of colored KPI cards (orders today, ready for
-> pickup, in progress, overdue, unpaid €) above a one-tap "pickups due today" list.
+## 🖼️ Screenshots
+
+*(all data shown is fake demo data from `seed_demo.py`)*
+
+**Dashboard** — KPI cards + one-tap "pickups due today" list:
+
+![Dashboard](docs/screenshots/dashboard.jpg)
+
+**New Order** — pick a customer, tap service-type cards, done (price is set
+after processing):
+
+![New Order](docs/screenshots/new-order.jpg)
+
+**Orders** — status filters, colored badges, one-tap status advance, TBD
+pricing and payment tracking:
+
+![Orders](docs/screenshots/orders.jpg)
 
 ---
 
@@ -19,18 +33,20 @@ database setup at all) and scales up to **MySQL**.
 
 - **📊 KPI dashboard** — today's orders, ready-for-pickup, in-progress, overdue
   and unpaid totals as big metric cards, plus a *pickups due today* action list.
-- **🧺 POS-style order entry** — search a customer by phone, tap services with
-  quantity steppers, watch the total update live, hit one big button. ~20 seconds
-  per order.
+- **🧺 POS-style order entry** — search a customer by phone, tap the service-type
+  cards (L, B+W/P, Dry Clean, …), hit one big button. ~20 seconds per order.
+- **💶 Price after processing** — orders start as **TBD**; staff enter the final
+  price from the Orders page (or right in the *Mark ready* step) once the items
+  are done. Payment can only be recorded after a price is set.
 - **🎨 Color status badges** — `🕐 Pending → 🌀 Washing → ✅ Ready → 📦 Picked up`,
   with `⚠️ Overdue` derived automatically; every state is icon + label, never
   color alone.
 - **💶 Payment tracking** — paid/unpaid per order, one-tap *Mark paid*, unpaid
-  total on the dashboard.
+  total on the dashboard (with a "+N TBD" hint for orders not priced yet).
 - **🔍 Global search** — one box finds customers and orders by name, phone or
   ticket number from anywhere in the app.
-- **🧾 Services & prices** — manage your service menu (name, price, unit,
-  active) in Settings; line items snapshot prices so old bills never change.
+- **🧾 Service types** — manage the service cards (code, description, active)
+  in Settings without touching code.
 - **🔒 Safe by default** — credentials live in a git-ignored `.env`, customer
   deletion is blocked while orders exist, destructive actions get confirmation
   dialogs.
