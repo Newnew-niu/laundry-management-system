@@ -39,13 +39,16 @@ def _cfg(name, default=""):
 ENGINE = _cfg("DB_ENGINE", "sqlite").strip().lower()
 DB_PATH = _cfg("DB_PATH", "laundry.db")
 
+# Service *types* only — pricing happens per order, after processing.
 DEFAULT_SERVICES = [
-    ("Wash & Fold", 8.00, "kg"),
-    ("Dry Cleaning", 12.00, "item"),
-    ("Ironing", 3.00, "item"),
-    ("Bedding / Duvet", 15.00, "item"),
-    ("Shoes Cleaning", 10.00, "pair"),
-    ("Express (24h) Surcharge", 5.00, "order"),
+    ("L", "Laundry + Dry + Fold"),
+    ("B+W/P", "Wash + Iron"),
+    ("S+W/P", "Wash + Iron"),
+    ("B+P/O", "Iron Only"),
+    ("S++P/O", "Iron Only"),
+    ("Dry Only", ""),
+    ("Duvet", ""),
+    ("Dry Clean", ""),
 ]
 
 _SQLITE_SCHEMA = """
@@ -69,11 +72,12 @@ CREATE TABLE IF NOT EXISTS orders (
     created_at         TEXT DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS services (
-    service_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name       TEXT NOT NULL,
-    price      REAL NOT NULL DEFAULT 0,
-    unit       TEXT DEFAULT 'item',
-    active     INTEGER DEFAULT 1
+    service_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    price       REAL NOT NULL DEFAULT 0,
+    unit        TEXT DEFAULT 'item',
+    active      INTEGER DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS order_items (
     item_id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -168,14 +172,20 @@ def init_db():
         conn = get_connection()
         try:
             conn.executescript(_SQLITE_SCHEMA)
+            # Older local databases predate the description column.
+            try:
+                conn.execute("ALTER TABLE services ADD COLUMN description TEXT DEFAULT ''")
+            except sqlite3.OperationalError:
+                pass
             conn.commit()
         finally:
             conn.close()
     if fetch_one("SELECT COUNT(*) FROM services")[0] == 0:
-        for name, price, unit in DEFAULT_SERVICES:
+        for name, description in DEFAULT_SERVICES:
             execute(
-                "INSERT INTO services (name, price, unit, active) VALUES (?, ?, ?, 1)",
-                (name, price, unit),
+                "INSERT INTO services (name, description, price, unit, active) "
+                "VALUES (?, ?, 0, 'item', 1)",
+                (name, description),
             )
     _initialised = True
 
@@ -209,7 +219,7 @@ def search_customers(term=""):
 
 def get_active_services():
     return fetch_all(
-        "SELECT service_id, name, price, unit FROM services "
+        "SELECT service_id, name, description FROM services "
         "WHERE active = 1 ORDER BY service_id"
     )
 
@@ -250,34 +260,30 @@ def get_order_items(order_ids):
     )
     summary = {}
     for oid, name, qty in rows:
-        qty_txt = f"{qty:g}"
-        summary.setdefault(oid, []).append(f"{name} ×{qty_txt}")
+        label = name if float(qty) == 1 else f"{name} ×{qty:g}"
+        summary.setdefault(oid, []).append(label)
     return {oid: ", ".join(parts) for oid, parts in summary.items()}
 
 
-def create_order(customer_id, order_code, pickup_date, items, paid, notes):
-    """Insert an order plus its line items; returns (order_id, total)."""
-    total = sum(price * qty for _sid, _name, price, qty in items)
+def create_order(customer_id, order_code, pickup_date, services, notes):
+    """Insert an order plus its selected service types.
+
+    ``services`` is a list of (service_id, name). The price is unknown at
+    drop-off, so total_amount is stored as NULL ("TBD") and entered later
+    from the Orders page once processing is done.
+    """
     order_id = execute(
         """
         INSERT INTO orders (customer_id, order_code, order_date,
                             agreed_pickup_time, status, paid, total_amount, notes)
-        VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)
+        VALUES (?, ?, ?, ?, 'pending', 0, NULL, ?)
         """,
-        (
-            customer_id,
-            order_code,
-            _dt.date.today(),
-            pickup_date,
-            1 if paid else 0,
-            total,
-            notes,
-        ),
+        (customer_id, order_code, _dt.date.today(), pickup_date, notes),
     )
-    for service_id, name, price, qty in items:
+    for service_id, name in services:
         execute(
             "INSERT INTO order_items (order_id, service_id, service_name, "
-            "unit_price, quantity) VALUES (?, ?, ?, ?, ?)",
-            (order_id, service_id, name, price, qty),
+            "unit_price, quantity) VALUES (?, ?, ?, 0, 1)",
+            (order_id, service_id, name),
         )
-    return order_id, total
+    return order_id

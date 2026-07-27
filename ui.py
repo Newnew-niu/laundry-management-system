@@ -75,7 +75,57 @@ def paid_chip(paid):
 
 
 def euro(amount):
-    return f"€ {float(amount or 0):,.2f}"
+    """Format an amount; a NULL price (not yet decided) reads as TBD."""
+    if amount is None:
+        return "TBD"
+    return f"€ {float(amount):,.2f}"
+
+
+def amount_display(amount):
+    """HTML snippet for an order amount: bold € value, or an amber TBD tag."""
+    if amount is None:
+        return '<span style="color:#b97d0e;font-weight:700;">💶 TBD</span>'
+    return f"<b>{euro(amount)}</b>"
+
+
+@st.dialog("💶 Set final price")
+def price_dialog(order_id, code, advance_to=None):
+    """Enter the final price once processing is done.
+
+    When ``advance_to`` is given (e.g. 'ready'), saving also moves the order
+    to that status; a skip button advances without pricing yet.
+    """
+    import db  # local import: keep ui free of a hard db dependency
+
+    st.markdown(f"Order **{code or order_id}** — enter the final price (€).")
+    amount = st.number_input(
+        "Final price (€)", min_value=0.0, value=None, step=1.0, format="%.2f",
+        placeholder="e.g. 24.50",
+    )
+    label = "💾 Save price" if advance_to is None else "💾 Save price & mark ready"
+    if st.button(label, type="primary", width="stretch",
+                 disabled=amount is None):
+        if advance_to:
+            db.execute(
+                "UPDATE orders SET total_amount=?, status=? WHERE order_id=?",
+                (amount, advance_to, order_id),
+            )
+            flash(f"Order {code or order_id} priced {euro(amount)} → "
+                  f"{STATUS_META[advance_to][0]}.", "💶")
+        else:
+            db.execute(
+                "UPDATE orders SET total_amount=? WHERE order_id=?",
+                (amount, order_id),
+            )
+            flash(f"Order {code or order_id} priced {euro(amount)}.", "💶")
+        st.rerun()
+    if advance_to and st.button("Skip — price later", width="stretch"):
+        db.execute(
+            "UPDATE orders SET status=? WHERE order_id=?", (advance_to, order_id)
+        )
+        flash(f"Order {code or order_id} → {STATUS_META[advance_to][0]} "
+              "(price still TBD).")
+        st.rerun()
 
 
 def fmt_date(value):
@@ -127,6 +177,18 @@ def inject_css():
 
         /* Centre table text */
         .stDataFrame th, .stDataFrame td { text-align: center !important; }
+
+        /* Delete buttons: red, clearly distinct from blue primary actions */
+        div[class*="st-key-del_"] button,
+        div[class*="st-key-cdel_"] button {
+            color: #d03b3b;
+            border: 1px solid #d03b3b;
+        }
+        div[class*="st-key-confirm_del"] button {
+            background: #d03b3b !important;
+            border: 1px solid #d03b3b !important;
+            color: #ffffff !important;
+        }
 
         /* Order list rows */
         .order-row {

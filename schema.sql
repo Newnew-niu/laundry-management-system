@@ -42,12 +42,15 @@ CREATE TABLE IF NOT EXISTS orders (
         FOREIGN KEY (customer_id) REFERENCES customers (customer_id)
 );
 
+-- Services are *types* (code + description); the price is decided per order
+-- after processing, so the price/unit columns are legacy and unused.
 CREATE TABLE IF NOT EXISTS services (
-    service_id INT AUTO_INCREMENT PRIMARY KEY,
-    name       VARCHAR(255) NOT NULL,
-    price      DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    unit       VARCHAR(50) DEFAULT 'item',
-    active     TINYINT DEFAULT 1
+    service_id  INT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(255) NOT NULL,
+    description VARCHAR(255) DEFAULT '',
+    price       DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    unit        VARCHAR(50) DEFAULT 'item',
+    active      TINYINT DEFAULT 1
 );
 
 -- Line items snapshot the service name & price at order time, so later price
@@ -68,11 +71,15 @@ CREATE INDEX idx_orders_code ON orders (order_code);
 CREATE INDEX idx_orders_status ON orders (status);
 CREATE INDEX idx_items_order ON order_items (order_id);
 
--- Starter services (the app also seeds these automatically if the table is empty).
-INSERT INTO services (name, price, unit, active) VALUES
-    ('Wash & Fold', 8.00, 'kg', 1),
-    ('Dry Cleaning', 12.00, 'item', 1),
-    ('Ironing', 3.00, 'item', 1),
-    ('Bedding / Duvet', 15.00, 'item', 1),
-    ('Shoes Cleaning', 10.00, 'pair', 1),
-    ('Express (24h) Surcharge', 5.00, 'order', 1);
+-- Starter service types (the app also seeds these automatically if the table
+-- is empty). total_amount on orders stays NULL ("TBD") until staff enter the
+-- final price after processing.
+INSERT INTO services (name, description, price, unit, active) VALUES
+    ('L', 'Laundry + Dry + Fold', 0, 'item', 1),
+    ('B+W/P', 'Wash + Iron', 0, 'item', 1),
+    ('S+W/P', 'Wash + Iron', 0, 'item', 1),
+    ('B+P/O', 'Iron Only', 0, 'item', 1),
+    ('S++P/O', 'Iron Only', 0, 'item', 1),
+    ('Dry Only', '', 0, 'item', 1),
+    ('Duvet', '', 0, 'item', 1),
+    ('Dry Clean', '', 0, 'item', 1);

@@ -39,7 +39,7 @@ def _delete_dialog(cid, name):
         return
     st.warning(f"Delete customer **{name}**? This cannot be undone.")
     c1, c2 = st.columns(2)
-    if c1.button("Yes, delete", type="primary", width="stretch"):
+    if c1.button("Yes, delete", key="confirm_del_cust", width="stretch"):
         db.execute("DELETE FROM customers WHERE customer_id = ?", (cid,))
         ui.flash(f"Customer “{name}” deleted.", "🗑️")
         st.rerun()
@@ -56,7 +56,8 @@ def render():
             name = c1.text_input("Name *")
             phone = c2.text_input("Phone")
             notes = st.text_input("Notes")
-            if st.form_submit_button("Save customer", width="stretch"):
+            if st.form_submit_button("Save customer", type="primary",
+                                     width="stretch"):
                 if not name.strip():
                     st.error("Name is required.")
                 else:
