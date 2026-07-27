@@ -10,10 +10,11 @@ import db
 import ui
 
 
-def _reset_selection():
-    for key in list(st.session_state):
-        if key.startswith("svc_"):
-            del st.session_state[key]
+def _form_rev():
+    """Monotonic revision baked into widget keys: bumping it after a
+    successful order re-creates every input fresh (deleting session keys
+    alone leaves stale toggle state on the frontend)."""
+    return st.session_state.setdefault("order_form_rev", 0)
 
 
 def _customer_picker():
@@ -60,24 +61,31 @@ def render():
         st.info("No services configured yet — add some in **Settings** first.")
         return
 
+    rev = _form_rev()
     selected = []
     cols = st.columns(4)
     for i, (sid, name, description) in enumerate(services):
         with cols[i % 4].container(border=True):
             st.markdown(f"**{name}**")
             st.caption(description or "&nbsp;", unsafe_allow_html=True)
-            if st.toggle("Select", key=f"svc_{sid}"):
+            if st.toggle("Select", key=f"svc_{rev}_{sid}"):
                 selected.append((sid, name))
 
     # --- Step 3: details + big submit (no price yet — entered after
     # processing, from the Orders page) ---
     st.markdown("#### 3️⃣ Confirm")
     col1, col2 = st.columns(2)
-    order_code = col1.text_input("Ticket no.", value=db.next_order_code())
-    pickup = col2.date_input(
-        "Pickup date", dt.date.today() + dt.timedelta(days=2), format="DD/MM/YYYY"
+    order_code = col1.text_input(
+        "Ticket no.", value=db.next_order_code(), key=f"code_{rev}"
     )
-    notes = st.text_input("Notes (optional)", placeholder="E.g. red wine stain on shirt")
+    pickup = col2.date_input(
+        "Pickup date", dt.date.today() + dt.timedelta(days=2),
+        format="DD/MM/YYYY", key=f"pickup_{rev}",
+    )
+    notes = st.text_input(
+        "Notes (optional)", placeholder="E.g. red wine stain on shirt",
+        key=f"notes_{rev}",
+    )
 
     if selected:
         st.markdown("🧾 " + "  ·  ".join(name for _sid, name in selected))
@@ -103,7 +111,9 @@ def render():
         db.create_order(
             customer_id, order_code.strip(), pickup, selected, notes.strip()
         )
-        _reset_selection()
+        # Bump the form revision: all inputs (toggles, code, notes) rebuild
+        # empty on the rerun, ready for the next order.
+        st.session_state["order_form_rev"] = rev + 1
         ui.flash(f"Order {order_code} created — price to be set after processing.",
                  "🧺")
         st.rerun()
