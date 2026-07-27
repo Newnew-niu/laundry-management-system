@@ -9,6 +9,9 @@ database setup at all) and scales up to **MySQL**.
 ![Streamlit](https://img.shields.io/badge/streamlit-1.45%2B-ff4b4b)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+**🚀 Live demo:** [laundry-management-system.streamlit.app](https://laundry-management-system.streamlit.app)
+*(public demo on the SQLite engine — data resets on restart, so feel free to play)*
+
 ## 🖼️ Screenshots
 
 *(all data shown is fake demo data from `seed_demo.py`)*
